@@ -86,7 +86,7 @@ flowchart LR
     zod -- "no, 1st time" --> llm
     zod -- "no, 2nd time" --> r502["502 llm_output_invalid"]
     zod -- yes --> tx[("PostgreSQL<br/>ticket + usage rows<br/>one transaction")]
-    r502 -. "tokens still recorded" .-> tx
+    r502 -.->|tokens still recorded| tx
     tx --> resp["201 + Zod-validated response"]
 ```
 
@@ -105,7 +105,7 @@ sequenceDiagram
     S->>S: budget check (tokens used today < daily budget)
     S->>C: classify(subject, body)
     C->>P: attempt 1
-    P->>A: messages.create(system prompt, <ticket>JSON</ticket>, JSON schema, max_tokens, timeout)
+    P->>A: messages.create: system prompt, delimited ticket JSON, JSON schema, max_tokens, timeout
     A-->>P: text + stop_reason + usage
     P-->>C: raw text, outcome, usage per model
     C->>C: JSON.parse + strict Zod parse
@@ -117,7 +117,7 @@ sequenceDiagram
     end
     alt valid
         C-->>S: classification + attempts
-        S->>S: BEGIN; INSERT ticket; INSERT llm_usage (every attempt); COMMIT
+        S->>S: one transaction: INSERT ticket + INSERT llm_usage (every attempt)
     else invalid twice / refused / timeout
         C-->>S: LlmFailure(502/503/504, attempts)
         S->>S: INSERT llm_usage (attempts, no ticket)
