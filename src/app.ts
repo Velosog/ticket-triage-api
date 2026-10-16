@@ -10,12 +10,19 @@ import type { Config } from './config.js';
 import type { Database } from './db/client.js';
 import { registerProblemHandlers } from './http/problem.js';
 import type { AppInstance } from './http/types.js';
+import { TicketClassifier } from './llm/classifier.js';
+import type { LlmProvider } from './llm/types.js';
+import { ClientsRepository } from './modules/clients/clients.repository.js';
 import { healthRoutes } from './modules/health/health.routes.js';
+import { TicketsRepository } from './modules/tickets/tickets.repository.js';
+import { TicketsService } from './modules/tickets/tickets.service.js';
+import { v1Routes } from './modules/v1.js';
 
 export interface AppDependencies {
   config: Config;
   db: Database;
   logger: FastifyBaseLogger;
+  llmProvider: LlmProvider;
 }
 
 const REQUEST_ID_PATTERN = /^[A-Za-z0-9._-]{8,64}$/;
@@ -48,7 +55,17 @@ export async function buildApp(deps: AppDependencies): Promise<AppInstance> {
   await app.register(helmet, { global: true });
   registerProblemHandlers(app);
 
+  // Composition root: routes -> services -> repositories / providers.
+  const classifier = new TicketClassifier(deps.llmProvider, app.log);
+  const tickets = new TicketsService(new TicketsRepository(deps.db), classifier);
+
   await app.register(healthRoutes, { db: deps.db });
+  await app.register(v1Routes, {
+    prefix: '/v1',
+    config: deps.config,
+    clients: new ClientsRepository(deps.db),
+    tickets,
+  });
 
   return app;
 }

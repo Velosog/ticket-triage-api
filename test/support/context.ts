@@ -1,12 +1,14 @@
-import type { FastifyInstance } from 'fastify';
 import { pino } from 'pino';
 import { buildApp } from '../../src/app.js';
 import { type Config, loadConfig } from '../../src/config.js';
 import { createDatabase, type Database, type DatabaseHandle } from '../../src/db/client.js';
+import type { AppInstance } from '../../src/http/types.js';
+import { FakeLlmProvider } from '../../src/llm/fake-provider.js';
+import type { LlmProvider } from '../../src/llm/types.js';
 import { assertTestDatabase, truncateAll } from './database.js';
 
 export interface TestContext {
-  app: FastifyInstance;
+  app: AppInstance;
   db: Database;
   config: Config;
 }
@@ -20,11 +22,19 @@ export function createTestHarness(overrides: Partial<Config> = {}) {
   let current: TestContext | undefined;
 
   return {
-    async setup(extra: Partial<Config> = {}): Promise<TestContext> {
+    async setup(
+      extra: Partial<Config> = {},
+      llmProvider: LlmProvider = new FakeLlmProvider(),
+    ): Promise<TestContext> {
       const config = { ...loadConfig(), ...overrides, ...extra };
       handle ??= createDatabase(assertTestDatabase(config.DATABASE_URL), 5);
       await truncateAll(handle.db);
-      const app = await buildApp({ config, db: handle.db, logger: pino({ level: 'silent' }) });
+      const app = await buildApp({
+        config,
+        db: handle.db,
+        logger: pino({ level: 'silent' }),
+        llmProvider,
+      });
       current = { app, db: handle.db, config };
       return current;
     },

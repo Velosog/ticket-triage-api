@@ -1,6 +1,7 @@
 import { buildApp } from './app.js';
 import { ConfigError, loadConfig } from './config.js';
 import { createDatabase } from './db/client.js';
+import { createLlmProvider } from './llm/provider-factory.js';
 import { createLogger } from './logger.js';
 
 async function main(): Promise<void> {
@@ -8,7 +9,7 @@ async function main(): Promise<void> {
   const logger = createLogger(config);
   const { db, pool } = createDatabase(config.DATABASE_URL, config.DATABASE_POOL_MAX);
 
-  const app = await buildApp({ config, db, logger });
+  const app = await buildApp({ config, db, logger, llmProvider: createLlmProvider(config) });
   app.addHook('onClose', async () => {
     await pool.end();
   });
