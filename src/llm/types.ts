@@ -18,10 +18,10 @@ export interface TokenUsage {
 
 /**
  * - completed: the model finished; `text` should contain the JSON answer
- * - truncated: the output hit max_tokens and is incomplete
+ * - incomplete: it stopped early (e.g. max_tokens), so `text` may be cut off
  * - refused: the model (or its safety classifiers) declined the request
  */
-export type ProviderOutcome = 'completed' | 'truncated' | 'refused';
+export type ProviderOutcome = 'completed' | 'incomplete' | 'refused';
 
 export interface ProviderResponse {
   /** Raw model output. Untrusted until validated against the schema. */

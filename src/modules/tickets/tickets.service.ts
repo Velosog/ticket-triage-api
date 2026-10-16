@@ -19,10 +19,12 @@ export class TicketsService {
 
   async create(client: AuthenticatedClient, input: CreateTicketInput): Promise<TicketDto> {
     // Only subject and body reach the LLM; the email address stays here.
-    const { classification, response } = await this.classifier.classify({
+    const { classification, model, attempts } = await this.classifier.classify({
       subject: input.subject,
       body: input.body,
     });
+    // Every attempt is billed, including an invalid answer that was retried.
+    const usage = attempts.flatMap((attempt) => attempt.usage);
 
     const row = await this.tickets.insert({
       clientId: client.id,
@@ -31,10 +33,10 @@ export class TicketsService {
       customerEmail: input.customerEmail,
       ...classification,
       llmProvider: this.classifier.providerName,
-      llmModel: response.model,
+      llmModel: model,
       promptVersion: PROMPT_VERSION,
-      inputTokens: sum(response.usage.map((usage) => usage.inputTokens)),
-      outputTokens: sum(response.usage.map((usage) => usage.outputTokens)),
+      inputTokens: sum(usage.map((entry) => entry.inputTokens)),
+      outputTokens: sum(usage.map((entry) => entry.outputTokens)),
       costMicroUsd: 0,
     });
 

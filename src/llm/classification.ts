@@ -29,6 +29,34 @@ export const classificationSchema = z.strictObject({
 
 export type Classification = z.infer<typeof classificationSchema>;
 
+/** JSON Schema keywords the structured-outputs API does not accept. */
+const UNSUPPORTED_KEYWORDS = ['$schema', 'minLength', 'maxLength', 'pattern'];
+
+/**
+ * JSON Schema sent to the API as the structured-output format, generated
+ * from the Zod schema above so the two cannot drift. `enum` and
+ * `additionalProperties: false` are kept, so the model cannot even produce
+ * an unknown category or an extra field; length limits are not supported by
+ * the API, so they are dropped here and enforced by Zod on the answer.
+ */
+export function classificationJsonSchema(): Record<string, unknown> {
+  return stripUnsupported(z.toJSONSchema(classificationSchema)) as Record<string, unknown>;
+}
+
+function stripUnsupported(node: unknown): unknown {
+  if (Array.isArray(node)) {
+    return node.map(stripUnsupported);
+  }
+  if (typeof node !== 'object' || node === null) {
+    return node;
+  }
+  return Object.fromEntries(
+    Object.entries(node)
+      .filter(([key]) => !UNSUPPORTED_KEYWORDS.includes(key))
+      .map(([key, value]) => [key, stripUnsupported(value)]),
+  );
+}
+
 export type ParseResult =
   | { success: true; data: Classification }
   | { success: false; reason: 'not_json' | 'schema_mismatch'; issues: string[] };
