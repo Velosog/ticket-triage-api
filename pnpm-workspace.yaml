@@ -1,0 +1,4 @@
+# pnpm settings for this project.
+# Only esbuild (used by tsx, vitest and drizzle-kit) may run install scripts.
+allowBuilds:
+  esbuild: true
