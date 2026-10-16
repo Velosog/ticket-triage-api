@@ -1,0 +1,16 @@
+version: 2
+updates:
+  - package-ecosystem: npm # also covers pnpm (pnpm-lock.yaml)
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 10
+    groups:
+      # One PR per week for minor/patch updates keeps the noise down.
+      npm-minor-and-patch:
+        update-types: [minor, patch]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
