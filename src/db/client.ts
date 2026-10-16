@@ -3,6 +3,9 @@ import pg from 'pg';
 import * as schema from './schema.js';
 
 export type Database = NodePgDatabase<typeof schema>;
+/** A transaction handle; repositories accept either, so services own transactions. */
+export type Transaction = Parameters<Parameters<Database['transaction']>[0]>[0];
+export type DbExecutor = Database | Transaction;
 
 export interface DatabaseHandle {
   db: Database;

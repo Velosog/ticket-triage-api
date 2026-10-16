@@ -25,6 +25,7 @@ export function createTestHarness(overrides: Partial<Config> = {}) {
     async setup(
       extra: Partial<Config> = {},
       llmProvider: LlmProvider = new FakeLlmProvider(),
+      now?: () => Date,
     ): Promise<TestContext> {
       const config = { ...loadConfig(), ...overrides, ...extra };
       handle ??= createDatabase(assertTestDatabase(config.DATABASE_URL), 5);
@@ -34,6 +35,7 @@ export function createTestHarness(overrides: Partial<Config> = {}) {
         db: handle.db,
         logger: pino({ level: 'silent' }),
         llmProvider,
+        ...(now === undefined ? {} : { now }),
       });
       current = { app, db: handle.db, config };
       return current;

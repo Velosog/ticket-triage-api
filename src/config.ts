@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { hasPricing } from './llm/pricing.js';
 
 const booleanFromString = z
   .enum(['true', 'false'])
@@ -43,6 +44,13 @@ export const configSchema = z
         code: 'custom',
         path: ['ANTHROPIC_API_KEY'],
         message: 'Required when LLM_PROVIDER=anthropic',
+      });
+    }
+    if (config.LLM_PROVIDER === 'anthropic' && !hasPricing(config.LLM_MODEL)) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['LLM_MODEL'],
+        message: 'No price configured for this model; add it to src/llm/pricing.ts',
       });
     }
     if (config.NODE_ENV === 'production' && config.LLM_PROVIDER === 'fake') {

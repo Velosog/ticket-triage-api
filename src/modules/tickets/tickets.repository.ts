@@ -1,10 +1,10 @@
 import { and, count, desc, eq, type SQL } from 'drizzle-orm';
-import type { Database } from '../../db/client.js';
+import type { DbExecutor } from '../../db/client.js';
 import { type NewTicketRow, tickets, type TicketRow } from '../../db/schema.js';
 import type { ListTicketsQuery } from './tickets.schemas.js';
 
 export class TicketsRepository {
-  constructor(private readonly db: Database) {}
+  constructor(private readonly db: DbExecutor) {}
 
   async insert(values: NewTicketRow): Promise<TicketRow> {
     const [row] = await this.db.insert(tickets).values(values).returning();

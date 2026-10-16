@@ -6,11 +6,14 @@ import { registerApiKeyAuth } from '../http/auth.js';
 import type { ClientsRepository } from './clients/clients.repository.js';
 import { ticketsRoutes } from './tickets/tickets.routes.js';
 import type { TicketsService } from './tickets/tickets.service.js';
+import { usageRoutes } from './usage/usage.routes.js';
+import type { UsageService } from './usage/usage.service.js';
 
 export interface V1Options {
   config: Config;
   clients: ClientsRepository;
   tickets: TicketsService;
+  usage: UsageService;
 }
 
 /**
@@ -18,6 +21,11 @@ export interface V1Options {
  * API key (preHandler, once the client is known).
  */
 export const v1Routes: FastifyPluginAsyncZod<V1Options> = async (app, options) => {
+  // Every /v1 operation requires the API key (documented in OpenAPI).
+  app.addHook('onRoute', (route) => {
+    route.schema = { ...route.schema, security: [{ apiKey: [] }] };
+  });
+
   registerApiKeyAuth(app, options.clients);
 
   await app.register(rateLimit, {
@@ -38,4 +46,5 @@ export const v1Routes: FastifyPluginAsyncZod<V1Options> = async (app, options) =
   });
 
   await app.register(ticketsRoutes, { service: options.tickets });
+  await app.register(usageRoutes, { service: options.usage });
 };

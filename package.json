@@ -22,6 +22,7 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx --env-file-if-exists=.env src/db/migrate.ts",
     "client:create": "tsx --env-file-if-exists=.env scripts/create-client.ts",
+    "docs:openapi": "tsx scripts/export-openapi.ts",
     "check": "pnpm lint && pnpm format:check && pnpm typecheck && pnpm test"
   },
   "dependencies": {

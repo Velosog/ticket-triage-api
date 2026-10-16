@@ -1,9 +1,14 @@
+import type { FastifyBaseLogger } from 'fastify';
+import type { Database } from '../../db/client.js';
 import type { TicketRow } from '../../db/schema.js';
 import { notFound } from '../../errors.js';
-import type { TicketClassifier } from '../../llm/classifier.js';
+import { LlmFailure, type TicketClassifier } from '../../llm/classifier.js';
 import { PROMPT_VERSION } from '../../llm/prompt.js';
 import type { AuthenticatedClient } from '../clients/clients.repository.js';
-import type { TicketsRepository } from './tickets.repository.js';
+import type { BudgetService } from '../usage/budget.service.js';
+import { usageRows } from '../usage/usage-recorder.js';
+import { UsageRepository } from '../usage/usage.repository.js';
+import { TicketsRepository } from './tickets.repository.js';
 import type {
   CreateTicketInput,
   ListTicketsQuery,
@@ -13,38 +18,72 @@ import type {
 
 export class TicketsService {
   constructor(
-    private readonly tickets: TicketsRepository,
+    private readonly db: Database,
     private readonly classifier: TicketClassifier,
+    private readonly budget: BudgetService,
+    private readonly logger: FastifyBaseLogger,
   ) {}
 
-  async create(client: AuthenticatedClient, input: CreateTicketInput): Promise<TicketDto> {
-    // Only subject and body reach the LLM; the email address stays here.
-    const { classification, model, attempts } = await this.classifier.classify({
-      subject: input.subject,
-      body: input.body,
-    });
-    // Every attempt is billed, including an invalid answer that was retried.
-    const usage = attempts.flatMap((attempt) => attempt.usage);
+  /**
+   * Budget check -> LLM classification -> ticket + usage rows in one
+   * transaction. If classification fails, the tokens spent are recorded
+   * anyway (and count against the budget) before the error is returned.
+   */
+  async create(
+    client: AuthenticatedClient,
+    input: CreateTicketInput,
+    requestId: string,
+  ): Promise<TicketDto> {
+    await this.budget.assertWithinBudget(client);
 
-    const row = await this.tickets.insert({
+    const usageContext = {
       clientId: client.id,
-      subject: input.subject,
-      body: input.body,
-      customerEmail: input.customerEmail,
-      ...classification,
-      llmProvider: this.classifier.providerName,
-      llmModel: model,
-      promptVersion: PROMPT_VERSION,
-      inputTokens: sum(usage.map((entry) => entry.inputTokens)),
-      outputTokens: sum(usage.map((entry) => entry.outputTokens)),
-      costMicroUsd: 0,
+      requestId,
+      provider: this.classifier.providerName,
+      defaultModel: this.classifier.model,
+    };
+
+    let result;
+    try {
+      // Only subject and body reach the LLM; the email address stays here.
+      result = await this.classifier.classify({ subject: input.subject, body: input.body });
+    } catch (error) {
+      if (error instanceof LlmFailure) {
+        await new UsageRepository(this.db).insertMany(
+          usageRows({ ...usageContext, ticketId: null }, error.attempts, this.logger),
+        );
+      }
+      throw error;
+    }
+
+    const { classification, model, attempts } = result;
+    const row = await this.db.transaction(async (tx) => {
+      const pending = usageRows({ ...usageContext, ticketId: null }, attempts, this.logger);
+      const ticket = await new TicketsRepository(tx).insert({
+        clientId: client.id,
+        subject: input.subject,
+        body: input.body,
+        customerEmail: input.customerEmail,
+        ...classification,
+        llmProvider: this.classifier.providerName,
+        llmModel: model,
+        promptVersion: PROMPT_VERSION,
+        // Every attempt is billed, including an invalid answer that was retried.
+        inputTokens: sum(pending.map((usage) => usage.inputTokens)),
+        outputTokens: sum(pending.map((usage) => usage.outputTokens)),
+        costMicroUsd: sum(pending.map((usage) => usage.costMicroUsd)),
+      });
+      await new UsageRepository(tx).insertMany(
+        pending.map((usage) => ({ ...usage, ticketId: ticket.id })),
+      );
+      return ticket;
     });
 
     return toDto(row);
   }
 
   async get(client: AuthenticatedClient, id: string): Promise<TicketDto> {
-    const row = await this.tickets.findForClient(client.id, id);
+    const row = await new TicketsRepository(this.db).findForClient(client.id, id);
     if (row === undefined) {
       throw notFound('ticket');
     }
@@ -52,7 +91,7 @@ export class TicketsService {
   }
 
   async list(client: AuthenticatedClient, query: ListTicketsQuery): Promise<TicketListDto> {
-    const { rows, total } = await this.tickets.listForClient(client.id, query);
+    const { rows, total } = await new TicketsRepository(this.db).listForClient(client.id, query);
 
     return {
       data: rows.map(toDto),

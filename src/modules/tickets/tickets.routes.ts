@@ -26,11 +26,11 @@ export const ticketsRoutes: FastifyPluginCallbackZod<{ service: TicketsService }
           'Classifies the ticket with the configured LLM and stores the result. ' +
           'Only the subject and body are sent to the LLM; the email address is not.',
         body: createTicketBody,
-        response: { 201: ticketResponse, ...problemResponses(400, 401, 429, 502, 504) },
+        response: { 201: ticketResponse, ...problemResponses(400, 401, 429, 502, 503, 504) },
       },
     },
     async (request, reply) => {
-      const ticket = await service.create(requireClient(request), request.body);
+      const ticket = await service.create(requireClient(request), request.body, request.id);
       return reply.code(201).send(ticket);
     },
   );

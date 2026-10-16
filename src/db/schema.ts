@@ -88,6 +88,44 @@ export const tickets = pgTable(
   ],
 );
 
+export const LLM_OUTCOMES = ['success', 'invalid_output', 'refused', 'error'] as const;
+export const llmOutcome = pgEnum('llm_outcome', LLM_OUTCOMES);
+
+/**
+ * One row per billed model attempt, including failed ones: an invalid answer
+ * that had to be retried still cost tokens. Source of truth for usage
+ * reports and daily budgets.
+ */
+export const llmUsage = pgTable(
+  'llm_usage',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    clientId: uuid('client_id')
+      .notNull()
+      .references(() => clients.id, { onDelete: 'cascade' }),
+    // NULL when classification failed and no ticket was stored.
+    ticketId: uuid('ticket_id').references(() => tickets.id, { onDelete: 'set null' }),
+    // Groups the attempts made for one API request.
+    requestId: text('request_id').notNull(),
+    provider: text('provider').notNull(),
+    model: text('model').notNull(),
+    attempt: integer('attempt').notNull(),
+    outcome: llmOutcome('outcome').notNull(),
+    inputTokens: integer('input_tokens').notNull(),
+    outputTokens: integer('output_tokens').notNull(),
+    cacheReadInputTokens: integer('cache_read_input_tokens').notNull().default(0),
+    cacheCreationInputTokens: integer('cache_creation_input_tokens').notNull().default(0),
+    costMicroUsd: bigint('cost_micro_usd', { mode: 'number' }).notNull(),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    // Budget check (today) and usage report (date range) for one client.
+    index('llm_usage_client_created_idx').on(table.clientId, table.createdAt),
+    index('llm_usage_ticket_idx').on(table.ticketId),
+  ],
+);
+
 export type ClientRow = typeof clients.$inferSelect;
 export type TicketRow = typeof tickets.$inferSelect;
 export type NewTicketRow = typeof tickets.$inferInsert;
+export type NewLlmUsageRow = typeof llmUsage.$inferInsert;

@@ -64,6 +64,10 @@ export class TicketClassifier {
     return this.provider.name;
   }
 
+  get model(): string {
+    return this.provider.model;
+  }
+
   async classify(ticket: TicketText): Promise<ClassificationResult> {
     const attempts: ClassificationAttempt[] = [];
 

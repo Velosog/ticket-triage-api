@@ -45,6 +45,17 @@ describe('loadConfig', () => {
     expect(() => loadConfig({ ...base, LLM_PROVIDER: 'anthropic' })).toThrow(/ANTHROPIC_API_KEY/);
   });
 
+  it('refuses a model without a configured price (cost tracking would be wrong)', () => {
+    expect(() =>
+      loadConfig({
+        ...base,
+        LLM_PROVIDER: 'anthropic',
+        ANTHROPIC_API_KEY: 'k',
+        LLM_MODEL: 'claude-unknown-9',
+      }),
+    ).toThrow(/LLM_MODEL/);
+  });
+
   it('rejects the fake provider in production', () => {
     expect(() => loadConfig({ ...base, NODE_ENV: 'production' })).toThrow(/LLM_PROVIDER/);
   });
