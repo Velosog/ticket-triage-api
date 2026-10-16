@@ -13,12 +13,12 @@ describe('loadConfig', () => {
     expect(config).toMatchObject({
       NODE_ENV: 'development',
       PORT: 3000,
-      LLM_MODEL: 'claude-opus-5-5',
+      LLM_MODEL: 'claude-haiku-5-5',
       LLM_EFFORT: 'low',
       LLM_TIMEOUT_MS: 20_000,
       RATE_LIMIT_PER_MINUTE: 60,
       TRUST_PROXY: false,
-      LLM_REFUSAL_FALLBACK: true,
+      LLM_REFUSAL_FALLBACK: false,
     });
   });
 
@@ -54,6 +54,31 @@ describe('loadConfig', () => {
         LLM_MODEL: 'claude-unknown-9',
       }),
     ).toThrow(/LLM_MODEL/);
+  });
+
+  it('refuses the refusal fallback on a model without one (it would silently do nothing)', () => {
+    expect(() =>
+      loadConfig({
+        ...base,
+        LLM_PROVIDER: 'anthropic',
+        ANTHROPIC_API_KEY: 'k',
+        LLM_MODEL: 'claude-haiku-5-5',
+        LLM_REFUSAL_FALLBACK: 'true',
+      }),
+    ).toThrow(/LLM_REFUSAL_FALLBACK/);
+  });
+
+  it('accepts the real-provider defaults, and the fallback on a model that has one', () => {
+    const real = { ...base, LLM_PROVIDER: 'anthropic', ANTHROPIC_API_KEY: 'k' };
+
+    expect(loadConfig(real)).toMatchObject({
+      LLM_MODEL: 'claude-haiku-5-5',
+      LLM_REFUSAL_FALLBACK: false,
+    });
+    expect(
+      loadConfig({ ...real, LLM_MODEL: 'claude-opus-5-5', LLM_REFUSAL_FALLBACK: 'true' })
+        .LLM_REFUSAL_FALLBACK,
+    ).toBe(true);
   });
 
   it('rejects the fake provider in production', () => {

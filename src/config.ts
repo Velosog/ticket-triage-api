@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { hasPricing } from './llm/pricing.js';
+import { supportsRefusalFallback } from './llm/refusal-fallback.js';
 
 const booleanFromString = z
   .enum(['true', 'false'])
@@ -26,14 +27,15 @@ export const configSchema = z
 
     LLM_PROVIDER: z.enum(['anthropic', 'fake']),
     ANTHROPIC_API_KEY: z.string().min(1).optional(),
-    LLM_MODEL: z.string().min(1).default('claude-opus-5-5'),
+    LLM_MODEL: z.string().min(1).default('claude-haiku-5-5'),
     LLM_EFFORT: z.enum(['low', 'medium', 'high']).default('low'),
     LLM_MAX_OUTPUT_TOKENS: z.coerce.number().int().min(256).max(8192).default(2048),
     LLM_TIMEOUT_MS: z.coerce.number().int().min(1000).max(120_000).default(20_000),
     // Transport-level retries done by the SDK (429/5xx/connection errors).
     LLM_MAX_TRANSPORT_RETRIES: z.coerce.number().int().min(0).max(5).default(1),
     // Server-side fallback to another model when the requested one declines.
-    LLM_REFUSAL_FALLBACK: booleanFromString.default(true),
+    // Off by default: Haiku 5.5 has no server-side fallback.
+    LLM_REFUSAL_FALLBACK: booleanFromString.default(false),
 
     RATE_LIMIT_PER_MINUTE: z.coerce.number().int().min(1).default(60),
     DEFAULT_DAILY_TOKEN_BUDGET: z.coerce.number().int().min(1).default(200_000),
@@ -51,6 +53,17 @@ export const configSchema = z
         code: 'custom',
         path: ['LLM_MODEL'],
         message: 'No price configured for this model; add it to src/llm/pricing.ts',
+      });
+    }
+    if (
+      config.LLM_PROVIDER === 'anthropic' &&
+      config.LLM_REFUSAL_FALLBACK &&
+      !supportsRefusalFallback(config.LLM_MODEL)
+    ) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['LLM_REFUSAL_FALLBACK'],
+        message: 'The configured LLM_MODEL has no server-side refusal fallback; set this to false',
       });
     }
     if (config.NODE_ENV === 'production' && config.LLM_PROVIDER === 'fake') {

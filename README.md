@@ -53,8 +53,8 @@ Content-Type: application/json
   "sentiment": "negative",
   "summary": "Customer was charged twice for the Pro plan this month and asks for a refund of one charge.",
   "suggestedReply": "Hi Jane, thanks for letting us know and sorry about the duplicate charge...",
-  "llm": { "provider": "anthropic", "model": "claude-opus-5-5", "promptVersion": "triage-v1" },
-  "usage": { "inputTokens": 812, "outputTokens": 95, "costUsd": 0.005148 },
+  "llm": { "provider": "anthropic", "model": "claude-haiku-5-5", "promptVersion": "triage-v1" },
+  "usage": { "inputTokens": 812, "outputTokens": 95, "costUsd": 0.000129 },
   "createdAt": "2026-10-16T15:42:37.009Z"
 }
 ```
@@ -192,7 +192,7 @@ interface LlmProvider {
 
 The provider is **only a transport**: it sends the request and returns the raw text, the stop outcome and the tokens used. The **policy** (validation, retry, error mapping) lives once in `TicketClassifier`, so the real adapter and the fake one get exactly the same guarantees, and adding another vendor means writing one small adapter.
 
-I picked the **official Anthropic SDK** (`@anthropic-ai/sdk`) for the real adapter because it covers every requirement without glue code: structured outputs that accept a JSON Schema with `enum`s, typed error classes (timeouts, 429, 5xx) that map cleanly to HTTP statuses, built-in per-request timeouts and transient retries, token usage on every response, and a server-side **refusal fallback**. If the model declines a request, the API retries it on a recommended fallback model inside the same call, and the per-model usage of each attempt is reported (and priced) separately. The default model is `claude-opus-5-5` with `effort: low` (classification is a simple task). The model is one environment variable: `claude-haiku-5-5` costs **40x less per output token**, and choosing it is a quality/cost decision to make with real tickets.
+I picked the **official Anthropic SDK** (`@anthropic-ai/sdk`) for the real adapter because it covers every requirement without glue code: structured outputs that accept a JSON Schema with `enum`s, typed error classes (timeouts, 429, 5xx) that map cleanly to HTTP statuses, built-in per-request timeouts and transient retries, token usage on every response, and a server-side **refusal fallback**. If the model declines a request, the API retries it on a recommended fallback model inside the same call, and the per-model usage of each attempt is reported (and priced) separately. The default model is `claude-haiku-5-5` with `effort: low`: classification is a simple, high-volume task, and Haiku costs **40x less per output token** than `claude-opus-5-5`. The model is one environment variable, and moving up to a larger model is a quality/cost decision to make with real tickets. Haiku 5.5 has no server-side refusal fallback, so `LLM_REFUSAL_FALLBACK` defaults to `false`. Turn it on only with a model that supports it, such as `claude-opus-5-5`; startup fails otherwise, because the flag would silently do nothing.
 
 ### 2. Validated structured output and the retry policy
 
@@ -310,7 +310,7 @@ Invoke-RestMethod -Uri http://localhost:3000/v1/usage -Headers $headers
 
 **Passwords:** the local database is bound to your machine and uses the `change-me` placeholder. If you change `POSTGRES_PASSWORD` (before the first `docker compose up`), change it inside `DATABASE_URL` too, and run tests with `$env:TEST_DATABASE_URL = "postgres://triage:<password>@localhost:5433/ticket_triage_test"`. The test runner deliberately does not read `.env`, so no secret from it can reach a test.
 
-By default `LLM_PROVIDER=fake`: the deterministic offline classifier, free and with no network. **To use Claude**, create a development API key **with a spend limit** in the Anthropic Console, then in `.env` set `LLM_PROVIDER=anthropic` and `ANTHROPIC_API_KEY=...`, and restart `pnpm dev`. Every response reports the tokens and estimated cost, and `/v1/usage` sums them per day. If the API rejects the refusal-fallback option for your account or model, set `LLM_REFUSAL_FALLBACK=false`.
+By default `LLM_PROVIDER=fake`: the deterministic offline classifier, free and with no network. **To use Claude**, create a development API key **with a spend limit** in the Anthropic Console, then in `.env` set `LLM_PROVIDER=anthropic` and `ANTHROPIC_API_KEY=...`, and restart `pnpm dev`. Every response reports the tokens and estimated cost, and `/v1/usage` sums them per day. The default model is `claude-haiku-5-5` with the refusal fallback off (`LLM_REFUSAL_FALLBACK=false`). If you switch `LLM_MODEL` to a model that supports the fallback, such as `claude-opus-5-5`, you can set it to `true`.
 
 Production build: `pnpm build` then `pnpm start` (runs `dist/server.js`). Set `NODE_ENV=production` (the fake provider is refused there) and `LOG_LEVEL=info`.
 

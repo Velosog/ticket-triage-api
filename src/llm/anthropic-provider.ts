@@ -1,6 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { classificationJsonSchema } from './classification.js';
 import { buildUserMessage, SYSTEM_PROMPT } from './prompt.js';
+import { REFUSAL_FALLBACK_BETA } from './refusal-fallback.js';
 import {
   type LlmProvider,
   LlmProviderError,
@@ -32,9 +33,6 @@ export interface AnthropicProviderOptions {
 
 /** Structured-output schema (enums enforced by the API, lengths by Zod). */
 const OUTPUT_SCHEMA = classificationJsonSchema();
-
-/** Server-side refusal fallback, routed by refusal category ("default"). */
-const REFUSAL_FALLBACK_BETA = 'server-side-fallback-2026-07-01';
 
 /**
  * Claude adapter (official @anthropic-ai/sdk). Single request, no tools:
